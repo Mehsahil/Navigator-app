@@ -1,0 +1,104 @@
+name: Build and Push Images
+
+on:
+  push:
+    branches:
+      - master
+
+permissions:
+  contents: read
+  id-token: write
+
+env:
+  PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
+  REGION: asia-south1
+  AR_REPOSITORY: navigation-app
+
+  IMAGE_TAG: ${{ github.sha }}
+
+jobs:
+
+  build-and-push:
+
+    runs-on: ubuntu-latest
+
+    steps:
+
+      # 1. Checkout
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # 2. Authenticate GitHub → GCP using OIDC/WIF
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v3
+        with:
+          workload_identity_provider: ${{ vars.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+
+          service_account: github-deploy-serviceaccount@${{ vars.GCP_PROJECT_ID }}.iam.gserviceaccount.com
+
+      # 3. Setup gcloud
+      - name: Setup Google Cloud CLI
+        uses: google-github-actions/setup-gcloud@v2
+        with:
+          project_id: ${{ env.PROJECT_ID }}
+
+      # 4. Configure Docker → Artifact Registry
+      - name: Configure Docker
+        run: |
+          gcloud auth configure-docker \
+            ${{ env.REGION }}-docker.pkg.dev \
+            --quiet
+
+      # 5. Define immutable image names
+      - name: Set image names
+        run: |
+
+          echo "BACKEND_IMAGE=${REGION}-docker.pkg.dev/${PROJECT_ID}/${AR_REPOSITORY}/backend:${IMAGE_TAG}" >> "$GITHUB_ENV"
+
+          echo "FRONTEND_IMAGE=${REGION}-docker.pkg.dev/${PROJECT_ID}/${AR_REPOSITORY}/frontend:${IMAGE_TAG}" >> "$GITHUB_ENV"
+
+
+      # 6. Build Backend
+      - name: Build backend
+        run: |
+          docker build \
+            --pull \
+            -t "$BACKEND_IMAGE" \
+            ./backend
+
+      # 7. Push Backend
+      - name: Push backend
+        run: |
+          docker push "$BACKEND_IMAGE"
+
+      # 8. Build Frontend
+      - name: Build frontend
+        run: |
+          docker build \
+            --pull \
+            -t "$FRONTEND_IMAGE" \
+            ./frontend
+
+      # 9. Push Frontend
+      - name: Push frontend
+        run: |
+          docker push "$FRONTEND_IMAGE"
+
+      # 10. Summary
+      - name: Build summary
+        run: |
+
+          echo "========================================="
+          echo "Images successfully pushed"
+          echo "========================================="
+
+          echo "Commit:"
+          echo "$GITHUB_SHA"
+
+          echo ""
+          echo "Backend:"
+          echo "$BACKEND_IMAGE"
+
+          echo ""
+          echo "Frontend:"
+          echo "$FRONTEND_IMAGE"

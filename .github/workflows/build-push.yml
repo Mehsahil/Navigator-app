@@ -34,7 +34,7 @@ jobs:
         with:
           workload_identity_provider: ${{ vars.GCP_WORKLOAD_IDENTITY_PROVIDER }}
 
-          service_account: github-deploy-serviceaccount@${{ vars.GCP_PROJECT_ID }}.iam.gserviceaccount.com
+          service_account: github-deploy-sa@${{ vars.GCP_PROJECT_ID }}.iam.gserviceaccount.com
 
       # 3. Setup gcloud
       - name: Setup Google Cloud CLI

@@ -12,7 +12,7 @@ permissions:
 env:
   PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
   REGION: asia-south1
-  AR_REPOSITORY: navigation-app
+  AR_REPOSITORY: navigator-application
 
   IMAGE_TAG: ${{ github.sha }}
 

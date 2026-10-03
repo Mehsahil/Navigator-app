@@ -1,0 +1,82 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+
+    <meta charset="UTF-8">
+
+    <meta
+        name="viewport"
+        content="width=device-width, initial-scale=1.0"
+    >
+
+    <title>Navigation POC</title>
+
+    <link
+        rel="stylesheet"
+        href="style.css"
+    >
+
+</head>
+
+<body>
+
+    <div class="container">
+
+        <h1>🚀 Navigation POC</h1>
+
+        <p>
+            GCP Cloud Run + Cloud SQL + Application Load Balancer
+        </p>
+
+        <div class="card">
+
+            <h2>Application Status</h2>
+
+            <p id="backend-status">
+                Checking backend...
+            </p>
+
+            <p id="db-status">
+                Checking Cloud SQL...
+            </p>
+
+            <p id="config-status">
+                Checking configuration...
+            </p>
+
+        </div>
+
+        <div class="card">
+
+            <h2>Architecture</h2>
+
+            <pre>
+Internet
+   |
+HTTPS
+   |
+External Application Load Balancer
+   |
+   +-------------------+
+   |                   |
+   | /                 | /api/*
+   |                   |
+Frontend            Backend
+Cloud Run           Cloud Run
+                       |
+                       |
+                  Cloud SQL
+                       |
+                  Secret Manager
+            </pre>
+
+        </div>
+
+    </div>
+
+    <script src="app.js"></script>
+
+</body>
+
+</html>

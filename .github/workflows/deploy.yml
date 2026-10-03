@@ -3,89 +3,139 @@ name: Deploy Navigation Application
 on:
   workflow_dispatch:
     inputs:
-      image_tag:
-        description: "Artifact Registry image tag to deploy (example: abc1234)"
+      frontend_image_tag:
+        description: "Frontend image tag to deploy"
         required: true
         type: string
+
+      backend_image_tag:
+        description: "Backend image tag to deploy"
+        required: true
+        type: string
+
 
 permissions:
   contents: read
   id-token: write
 
+
 env:
   PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
   REGION: asia-south1
-  AR_REPOSITORY: navigator-application
-  IMAGE_TAG: ${{ inputs.image_tag }}
 
+  # Artifact Registry
+  AR_REPOSITORY: navigator-application
+
+  # Image tags supplied during workflow dispatch
+  FRONTEND_IMAGE_TAG: ${{ inputs.frontend_image_tag }}
+  BACKEND_IMAGE_TAG: ${{ inputs.backend_image_tag }}
+
+  # Cloud SQL
   CLOUD_SQL_INSTANCE: ${{ vars.CLOUD_SQL_INSTANCE }}
 
-  # Cloud Run service names
+  # IMPORTANT:
+  # These must be the actual Cloud Run SERVICE names,
+  # not the Load Balancer backend-service names.
   BACKEND_SERVICE: navigator-backend-container
   FRONTEND_SERVICE: navigator-frontend-container
 
 jobs:
+
   deploy:
+
     runs-on: ubuntu-latest
 
     steps:
 
-      # 1. Checkout
+      # 1. Checkout repository
       - name: Checkout
         uses: actions/checkout@v4
 
-      # 2. Authenticate using OIDC / Workload Identity Federation
+      # 2. Authenticate to Google Cloud using OIDC / WIF
       - name: Authenticate to Google Cloud
         uses: google-github-actions/auth@v3
         with:
           workload_identity_provider: ${{ vars.GCP_WORKLOAD_IDENTITY_PROVIDER }}
           service_account: github-deploy-sa@${{ vars.GCP_PROJECT_ID }}.iam.gserviceaccount.com
 
-      # 3. Setup gcloud
+      # 3. Setup Google Cloud CLI
       - name: Setup Google Cloud CLI
         uses: google-github-actions/setup-gcloud@v2
         with:
           project_id: ${{ env.PROJECT_ID }}
 
-      # 4. Define exact image names
+      # 4. Build exact Artifact Registry image names
       - name: Set image names
         run: |
-          echo "BACKEND_IMAGE=${REGION}-docker.pkg.dev/${PROJECT_ID}/${AR_REPOSITORY}/backend:${IMAGE_TAG}" >> "$GITHUB_ENV"
-          echo "FRONTEND_IMAGE=${REGION}-docker.pkg.dev/${PROJECT_ID}/${AR_REPOSITORY}/frontend:${IMAGE_TAG}" >> "$GITHUB_ENV"
+          echo "BACKEND_IMAGE=${REGION}-docker.pkg.dev/${PROJECT_ID}/${AR_REPOSITORY}/backend:${BACKEND_IMAGE_TAG}" >> "$GITHUB_ENV"
 
-      # 5. Show deployment information
+          echo "FRONTEND_IMAGE=${REGION}-docker.pkg.dev/${PROJECT_ID}/${AR_REPOSITORY}/frontend:${FRONTEND_IMAGE_TAG}" >> "$GITHUB_ENV"
+
+      # 5. Display deployment information
       - name: Deployment information
         run: |
           echo "=========================================="
-          echo "Navigation Deployment"
+          echo "Navigation Application Deployment"
           echo "=========================================="
-          echo "Project: $PROJECT_ID"
-          echo "Region: $REGION"
-          echo "Image tag: $IMAGE_TAG"
+
+          echo "Project:"
+          echo "$PROJECT_ID"
+
+          echo ""
+          echo "Region:"
+          echo "$REGION"
+
+          echo ""
+          echo "Frontend image tag:"
+          echo "$FRONTEND_IMAGE_TAG"
+
+          echo ""
+          echo "Backend image tag:"
+          echo "$BACKEND_IMAGE_TAG"
+
           echo ""
           echo "Backend image:"
           echo "$BACKEND_IMAGE"
+
           echo ""
           echo "Frontend image:"
           echo "$FRONTEND_IMAGE"
 
-      # 6. Verify backend image exists
+          echo ""
+          echo "Backend Cloud Run service:"
+          echo "$BACKEND_SERVICE"
+
+          echo ""
+          echo "Frontend Cloud Run service:"
+          echo "$FRONTEND_SERVICE"
+
+      # 6. Verify backend image exists in Artifact Registry
       - name: Verify backend image
         run: |
+          echo "Checking backend image..."
+
           gcloud artifacts docker images describe \
             "$BACKEND_IMAGE" \
             --format="json"
 
-      # 7. Verify frontend image exists
+          echo "Backend image verified successfully."
+
+      # 7. Verify frontend image exists in Artifact Registry
       - name: Verify frontend image
         run: |
+          echo "Checking frontend image..."
+
           gcloud artifacts docker images describe \
             "$FRONTEND_IMAGE" \
             --format="json"
 
+          echo "Frontend image verified successfully."
+
       # 8. Deploy Backend Cloud Run service
       - name: Deploy backend
         run: |
+          echo "Deploying backend Cloud Run service..."
+
           gcloud run deploy "$BACKEND_SERVICE" \
             --image="$BACKEND_IMAGE" \
             --region="$REGION" \
@@ -97,9 +147,13 @@ jobs:
             --set-env-vars="ENVIRONMENT=staging,INSTANCE_UNIX_SOCKET=/cloudsql/${CLOUD_SQL_INSTANCE}" \
             --update-secrets="DB_NAME=navigator-mysql-database-name:1,DB_USER=navigator-mysql-database-user:1,DB_PASSWORD=navigator-mysql-database-password:1"
 
+          echo "Backend deployment completed."
+
       # 9. Deploy Frontend Cloud Run service
       - name: Deploy frontend
         run: |
+          echo "Deploying frontend Cloud Run service..."
+
           gcloud run deploy "$FRONTEND_SERVICE" \
             --image="$FRONTEND_IMAGE" \
             --region="$REGION" \
@@ -108,9 +162,15 @@ jobs:
             --ingress=internal-and-cloud-load-balancing \
             --port=8080
 
-      # 10. Verify Backend
+          echo "Frontend deployment completed."
+
+      # 10. Verify Backend Cloud Run deployment
       - name: Verify backend
         run: |
+          echo "=========================================="
+          echo "Backend Cloud Run Status"
+          echo "=========================================="
+
           gcloud run services describe "$BACKEND_SERVICE" \
             --region="$REGION" \
             --format="table(
@@ -119,9 +179,13 @@ jobs:
               status.url
             )"
 
-      # 11. Verify Frontend
+      # 11. Verify Frontend Cloud Run deployment
       - name: Verify frontend
         run: |
+          echo "=========================================="
+          echo "Frontend Cloud Run Status"
+          echo "=========================================="
+
           gcloud run services describe "$FRONTEND_SERVICE" \
             --region="$REGION" \
             --format="table(
@@ -130,24 +194,43 @@ jobs:
               status.url
             )"
 
-      # 12. Deployment summary
+      # 12. Final deployment summary
       - name: Deployment summary
         run: |
           echo "=========================================="
           echo "Deployment completed successfully"
           echo "=========================================="
+
           echo ""
-          echo "Image tag:"
-          echo "$IMAGE_TAG"
+          echo "Frontend image tag:"
+          echo "$FRONTEND_IMAGE_TAG"
+
           echo ""
-          echo "Backend:"
+          echo "Backend image tag:"
+          echo "$BACKEND_IMAGE_TAG"
+
+          echo ""
+          echo "Backend image:"
           echo "$BACKEND_IMAGE"
+
           echo ""
-          echo "Frontend:"
+          echo "Frontend image:"
           echo "$FRONTEND_IMAGE"
+
           echo ""
-          echo "Load Balancer: unchanged"
+          echo "Load Balancer:"
+          echo "Existing Load Balancer unchanged"
+
           echo ""
           echo "Routing:"
           echo "/       -> Frontend"
           echo "/api/*  -> Backend"
+
+          echo ""
+          echo "Cloud SQL:"
+          echo "$CLOUD_SQL_INSTANCE"
+
+          echo ""
+          echo "=========================================="
+          echo "Deployment successful"
+          echo "=========================================="
